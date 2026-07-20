@@ -7,7 +7,18 @@ import os
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini").lower()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash")
+# Google retires model IDs frequently (2.0-flash June 2026, 2.5-flash pulled for
+# new users July 2026). If the primary model 404s as retired, these are tried in
+# order — so a Google-side retirement degrades gracefully instead of breaking prod.
+GEMINI_FALLBACK_MODELS = [
+    m.strip()
+    for m in os.getenv(
+        "GEMINI_FALLBACK_MODELS",
+        "gemini-3-flash-preview,gemini-3.1-flash-lite-preview,gemini-2.5-flash-lite",
+    ).split(",")
+    if m.strip()
+]
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")

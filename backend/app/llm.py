@@ -98,14 +98,13 @@ def _meta(input_tokens: int, output_tokens: int, latency_ms: int) -> dict:
     }
 
 
-async def _gemini(prompt: str) -> tuple[dict, dict]:
-    if not config.GEMINI_API_KEY:
-        raise LLMError("GEMINI_API_KEY is not set (get a free key at https://aistudio.google.com/apikey)")
+def _is_model_retired(err: "LLMError") -> bool:
+    msg = str(err)
+    return "404" in msg and ("no longer available" in msg or "not found" in msg.lower())
 
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{config.GEMINI_MODEL}:generateContent"
-    )
+
+async def _gemini_once(model: str, prompt: str) -> tuple[dict, dict]:
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     started = time.monotonic()
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
@@ -117,8 +116,8 @@ async def _gemini(prompt: str) -> tuple[dict, dict]:
                     "maxOutputTokens": config.MAX_TOKENS,
                     # Force pure-JSON output — no markdown fences to strip.
                     "responseMimeType": "application/json",
-                    # Disable thinking on 2.5-flash so tokens go to the answer.
-                    "thinkingConfig": {"thinkingBudget": 0},
+                    # NOTE: no thinkingConfig here. Gemini 3 removed thinking_budget
+                    # (sending it returns 400); omitting it works across generations.
                 },
             },
         )
@@ -139,10 +138,35 @@ async def _gemini(prompt: str) -> tuple[dict, dict]:
         raise LLMError(f"Model returned invalid JSON: {exc}") from exc
 
     usage = data.get("usageMetadata", {})
-    return parsed, _meta(
+    meta = _meta(
         int(usage.get("promptTokenCount", 0)),
         int(usage.get("candidatesTokenCount", 0)) + int(usage.get("thoughtsTokenCount", 0)),
         latency_ms,
+    )
+    meta["model"] = model
+    return parsed, meta
+
+
+async def _gemini(prompt: str) -> tuple[dict, dict]:
+    if not config.GEMINI_API_KEY:
+        raise LLMError("GEMINI_API_KEY is not set (get a free key at https://aistudio.google.com/apikey)")
+
+    candidates = [config.GEMINI_MODEL] + [
+        m for m in config.GEMINI_FALLBACK_MODELS if m != config.GEMINI_MODEL
+    ]
+    last_err: LLMError | None = None
+    for model in candidates:
+        try:
+            return await _gemini_once(model, prompt)
+        except LLMError as err:
+            # Only fall through on "model retired" 404s; real errors surface immediately.
+            if _is_model_retired(err):
+                last_err = err
+                continue
+            raise
+    raise LLMError(
+        f"All configured Gemini models appear retired ({', '.join(candidates)}). "
+        f"Set GEMINI_MODEL to a current model. Last error: {last_err}"
     )
 
 

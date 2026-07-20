@@ -289,7 +289,13 @@ async function runTranslation(payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error(`API error (${response.status})`);
+  if (!response.ok) {
+    let detail = "";
+    try {
+      detail = (await response.json()).detail || "";
+    } catch {}
+    throw new Error(`API error (${response.status})${detail ? ": " + detail : ""}`);
+  }
   return await response.json();
 }
 /* __LLM_CALL_END__ */
@@ -761,6 +767,7 @@ export default function OfficeSpeakAI() {
 
               {result.meta && (
                 <p className="os-meta">
+                  {result.meta.model ? result.meta.model + " · " : ""}
                   {result.meta.input_tokens + result.meta.output_tokens} tokens · $
                   {Number(result.meta.cost_usd).toFixed(5)} · {result.meta.latency_ms} ms
                 </p>
