@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OfficeSpeak AI — say it like you mean it, professionally</title>
+    <script>
+      // Presence of this global switches the app into "deployed" mode:
+      // the frontend calls the FastAPI backend and shows server analytics.
+      // "" = same origin (dev proxy / reverse proxy). Set a full URL for split deploys.
+      window.OFFICESPEAK_API = "";
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
