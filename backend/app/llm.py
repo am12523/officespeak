@@ -17,7 +17,9 @@ from . import config
 
 
 class LLMError(Exception):
-    pass
+    def __init__(self, message: str, transient: bool = False):
+        super().__init__(message)
+        self.transient = transient
 
 
 def _repair_control_chars(s: str) -> str:
@@ -116,15 +118,19 @@ async def _gemini_once(model: str, prompt: str) -> tuple[dict, dict]:
                     "maxOutputTokens": config.MAX_TOKENS,
                     # Force pure-JSON output — no markdown fences to strip.
                     "responseMimeType": "application/json",
-                    # NOTE: no thinkingConfig here. Gemini 3 removed thinking_budget
-                    # (sending it returns 400); omitting it works across generations.
+                    # Gemini 3.x uses thinking_level (not the old thinking_budget,
+                    # which 400s). "minimal" cuts reasoning latency for rewrites.
+                    "thinkingConfig": {"thinkingLevel": config.GEMINI_THINKING_LEVEL},
                 },
             },
         )
     latency_ms = int((time.monotonic() - started) * 1000)
 
     if resp.status_code != 200:
-        raise LLMError(f"Gemini API returned {resp.status_code}: {resp.text[:200]}")
+        raise LLMError(
+            f"Gemini API returned {resp.status_code}: {resp.text[:200]}",
+            transient=resp.status_code in (429, 500, 502, 503, 504),
+        )
 
     data = resp.json()
     try:
@@ -192,7 +198,10 @@ async def _anthropic(prompt: str) -> tuple[dict, dict]:
     latency_ms = int((time.monotonic() - started) * 1000)
 
     if resp.status_code != 200:
-        raise LLMError(f"Anthropic API returned {resp.status_code}: {resp.text[:200]}")
+        raise LLMError(
+            f"Anthropic API returned {resp.status_code}: {resp.text[:200]}",
+            transient=resp.status_code in (429, 500, 502, 503, 504, 529),
+        )
 
     data = resp.json()
     text = "\n".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
@@ -209,7 +218,25 @@ async def _anthropic(prompt: str) -> tuple[dict, dict]:
     )
 
 
-async def complete(prompt: str) -> tuple[dict, dict]:
+async def _complete_once(prompt: str) -> tuple[dict, dict]:
     if config.LLM_PROVIDER == "anthropic":
         return await _anthropic(prompt)
     return await _gemini(prompt)
+
+
+async def complete(prompt: str) -> tuple[dict, dict]:
+    """Call the provider, retrying transient rate-limit/overload errors with
+    exponential backoff. Non-transient errors (bad key, invalid request) and
+    the final attempt raise immediately."""
+    import asyncio
+
+    last: LLMError | None = None
+    for attempt in range(config.LLM_MAX_RETRIES + 1):
+        try:
+            return await _complete_once(prompt)
+        except LLMError as err:
+            last = err
+            if not getattr(err, "transient", False) or attempt == config.LLM_MAX_RETRIES:
+                raise
+            await asyncio.sleep(config.LLM_RETRY_BASE_DELAY * (2 ** attempt))
+    raise last  # unreachable, but keeps type-checkers happy
