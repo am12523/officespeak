@@ -149,7 +149,7 @@ Include 2-5 items in "changes". Numbers must be integers.`;
   if (compare) {
     return `You are OfficeSpeak AI, a workplace communication assistant.
 
-Rewrite the following casual message for ${ctx}, in SEVEN different tones, preserving the sender's actual intent and any concrete facts (deadlines, names, commitments). Never invent commitments the sender didn't make. Preserve WHO is saying WHAT about WHOM: if the sender criticizes or blames ANOTHER person, every variant must still address that person's behavior — softened, never flipped into the sender's own shortcoming or a vague shared problem.${
+Rewrite the following casual message for ${ctx}, in SEVEN different tones, preserving the sender's actual intent and any concrete facts (deadlines, names, commitments). Never invent commitments the sender didn't make. Preserve WHO is saying WHAT about WHOM: if the sender criticizes or blames ANOTHER person, every variant must still address that person's behavior — softened, never flipped into the sender's own shortcoming or a vague shared problem, and always in the sender's own voice. If the message is a pure personal insult with no work-related point, do not invent professional content: return a single variant explaining there is no professional version.${
       context === "inperson" || context === "client"
         ? " This will be SAID OUT LOUD: natural spoken sentences only, no written formatting."
         : ""
@@ -175,7 +175,8 @@ Rewrite the following casual message so it is appropriate for ${ctx}, using a ${
 
 RULES — all mandatory:
 1. Preserve the sender's actual intent and any concrete facts (deadlines, names, commitments). Never invent commitments the sender didn't make.
-2. Preserve WHO is saying WHAT about WHOM. If the sender is criticizing, blaming, or making a demand of ANOTHER person, the rewrite must still be aimed at that person's behavior — softened in wording, identical in direction. NEVER flip the criticism into the sender's own shortcoming, and never dilute it into a vague shared problem. Example: "you are too stupid to explain things to" criticizes the OTHER person's ability to follow explanations; a correct rewrite addresses their difficulty following what's being explained (e.g. "I've noticed my explanations aren't landing with you — let's find a format that works"), NOT the sender's need for clearer information.
+2. Preserve WHO is saying WHAT about WHOM. If the sender is criticizing, blaming, or making a demand of ANOTHER person, the rewrite must still be aimed at that person's behavior — softened in wording, identical in direction. NEVER flip the criticism into the sender's own shortcoming, and never dilute it into a vague shared problem. Example: "you are too stupid to explain things to" criticizes the OTHER person's ability to follow explanations; a correct rewrite addresses their difficulty following what's being explained (e.g. "I've noticed my explanations aren't landing with you — let's find a format that works"), NOT the sender's need for clearer information. The rewrite is always spoken BY THE SENDER in the sender's own voice — never reposition the sender as the recipient, a bystander, or someone objecting to the message.
+2b. If the message contains no work-related intent that could survive a rewrite — a pure personal insult, an attack on someone's appearance or family, or nonsense with no request, complaint, or information in it — do NOT invent professional content and do NOT reframe it from someone else's perspective. Instead set "untranslatable": true, put a one-sentence explanation in "translation" addressed to the user, and leave "changes" empty. Blunt criticism about someone's WORK is translatable and must be rewritten normally, not flagged.
 3. Match the medium: ${
     context === "inperson" || context === "client"
       ? "this will be SAID OUT LOUD — write natural spoken sentences someone could comfortably say to a person's face; contractions are fine; no greetings, sign-offs, subject lines, or written formatting"
@@ -188,6 +189,7 @@ Message:
 Respond ONLY with valid JSON, no markdown fences, no preamble. Every string value must be a single valid JSON string — escape any line breaks inside string values as \\n. Exactly this shape:
 {
   "translation": "the rewritten message",
+  "untranslatable": false,
   "changes": [
     { "from": "casual word or phrase from the input", "to": "the replacement used", "reason": "one short sentence on why this wording works better" }
   ],
@@ -674,7 +676,7 @@ export default function OfficeSpeakAI() {
         <section className="os-panel os-out">
           <div className="os-panel-head">
             <span className="os-eyebrow">{mode === "forward" ? "Ready to send" : "What it actually means"}</span>
-            {result?.translation && !variants && (
+            {result?.translation && !variants && !result.untranslatable && (
               <button className="os-copy" onClick={() => copy(result.translation, "main")}>
                 {copied === "main" ? "Copied ✓" : "Copy"}
               </button>
@@ -704,11 +706,17 @@ export default function OfficeSpeakAI() {
           {/* Single result */}
           {result && !result.metaOnly && !loading && (
             <div className="os-memo">
-              <div className="os-stamp">{mode === "forward" ? "APPROVED FOR SEND" : "DECODED"}</div>
+              <div className={"os-stamp" + (result.untranslatable ? " os-stamp-flag" : "")}>
+                {result.untranslatable
+                  ? "NO PROFESSIONAL EQUIVALENT"
+                  : mode === "forward"
+                  ? "APPROVED FOR SEND"
+                  : "DECODED"}
+              </div>
               <p className="os-translation">{result.translation}</p>
               {mode === "reverse" && result.subtext && <p className="os-subtext">Subtext: {result.subtext}</p>}
 
-              {scoresAfter && (
+              {scoresAfter && !result.untranslatable && (
                 <div className="os-scores">
                   <ScoreBar label="Buzzword density" value={scoresAfter.buzzword_density} delta={delta("buzzword_density")} invert />
                   <ScoreBar label="Readability" value={scoresAfter.readability} delta={delta("readability")} />
@@ -721,7 +729,7 @@ export default function OfficeSpeakAI() {
                 </div>
               )}
 
-              {Array.isArray(result.changes) && result.changes.length > 0 && (
+              {!result.untranslatable && Array.isArray(result.changes) && result.changes.length > 0 && (
                 <div className="os-changes">
                   <span className="os-eyebrow">{mode === "forward" ? "Redline — what changed and why" : "Decoder ring"}</span>
                   {result.changes.map((c, i) => (
@@ -1042,6 +1050,7 @@ const CSS = `
   border: 2px solid var(--approve); padding: 4px 12px;
   transform: rotate(-2deg);
 }
+.os-stamp-flag { color: var(--redline); border-color: var(--redline); }
 .os-stamp-idle { color: var(--ink-soft); border-color: var(--line); }
 .os-stamp-busy { color: var(--blue); border-color: var(--blue); animation: os-pulse 1.2s ease-in-out infinite; }
 @keyframes os-pulse { 50% { opacity: 0.45; } }

@@ -45,7 +45,22 @@ DIRECTION_RULE = (
     "the sender's own shortcoming, and never dilute it into a vague shared problem. "
     'Example: "you are too stupid to explain things to" criticizes the OTHER person\'s '
     "ability to follow explanations; a correct rewrite addresses their difficulty following "
-    "what's being explained, NOT the sender's need for clearer information."
+    "what's being explained, NOT the sender's need for clearer information. "
+    "The rewrite is always spoken BY THE SENDER in the sender's own voice. Never "
+    "reposition the sender as the recipient, a bystander, or someone reporting or "
+    "objecting to the message — if the sender wrote an insult, the output is not a "
+    "complaint about that insult."
+)
+
+NO_INTENT_RULE = (
+    "If the message contains no work-related intent that could survive a rewrite — a pure "
+    "personal insult, an attack on someone's appearance or family, or nonsense with no "
+    "request, complaint, or information in it — do NOT invent professional content and do "
+    "NOT reframe it from someone else's perspective. Instead set \"untranslatable\": true, "
+    "put a one-sentence explanation in \"translation\" addressed to the user (e.g. \"There's "
+    "no professional version of this — it's a personal insult with no work-related point to "
+    "make.\"), and leave \"changes\" as an empty list. Blunt or harsh criticism about someone's "
+    "WORK is translatable and must be rewritten normally, not flagged."
 )
 
 
@@ -75,6 +90,7 @@ Rewrite the following casual message so it is appropriate for {ctx}, using a {to
 RULES — all mandatory:
 1. Preserve the sender's actual intent and any concrete facts (deadlines, names, commitments). Never invent commitments the sender didn't make.
 2. {DIRECTION_RULE}
+2b. {NO_INTENT_RULE}
 3. Match the medium: {medium}.
 {_modifier_block(modifiers)}
 Message:
@@ -83,6 +99,7 @@ Message:
 Respond ONLY with valid JSON, no markdown fences, no preamble. Every string value must be a single valid JSON string — escape any line breaks inside string values as \\n. Exactly this shape:
 {{
   "translation": "the rewritten message",
+  "untranslatable": false,
   "changes": [
     {{ "from": "casual word or phrase from the input", "to": "the replacement used", "reason": "one short sentence on why this wording works better" }}
   ],
@@ -137,7 +154,7 @@ def build_compare(text, context, modifiers):
     )
     return f'''You are OfficeSpeak AI, a workplace communication assistant.
 
-Rewrite the following casual message for {ctx}, in SEVEN different tones, preserving the sender's actual intent and any concrete facts (deadlines, names, commitments). Never invent commitments the sender didn't make. {DIRECTION_RULE}{spoken}
+Rewrite the following casual message for {ctx}, in SEVEN different tones, preserving the sender's actual intent and any concrete facts (deadlines, names, commitments). Never invent commitments the sender didn't make. {DIRECTION_RULE} {NO_INTENT_RULE} If untranslatable, return a single variant whose "translation" is that one-sentence explanation.{spoken}
 {_modifier_block(modifiers)}
 Message:
 """{text}"""
@@ -176,7 +193,7 @@ Your current version:
 
 User's revision instruction: "{instruction}"
 
-Revise YOUR CURRENT VERSION according to the instruction. Still preserve the original message's intent and facts, and preserve WHO is criticizing WHOM — never flip criticism of another person into the sender's own shortcoming.{spoken}
+Revise YOUR CURRENT VERSION according to the instruction. Still preserve the original message's intent and facts, and preserve WHO is criticizing WHOM — never flip criticism of another person into the sender's own shortcoming, and keep the text in the sender's own voice.{spoken}
 
 Respond ONLY with valid JSON, no markdown fences, no preamble. Every string value must be a single valid JSON string — escape any line breaks inside string values as \\n. Exactly this shape:
 {{
