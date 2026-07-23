@@ -189,7 +189,7 @@ Message:
 Respond ONLY with valid JSON, no markdown fences, no preamble. Every string value must be a single valid JSON string — escape any line breaks inside string values as \\n. Exactly this shape:
 {
   "translation": "the rewritten message",
-  "untranslatable": false,
+  "untranslatable": <true ONLY if rule 2b applies (no work-related intent); otherwise false>,
   "changes": [
     { "from": "casual word or phrase from the input", "to": "the replacement used", "reason": "one short sentence on why this wording works better" }
   ],
@@ -426,7 +426,12 @@ export default function OfficeSpeakAI() {
         setVariants(parsed.variants);
         setResult(parsed.meta ? { metaOnly: true, meta: parsed.meta } : null);
       } else {
-        setResult({ ...parsed, _input: text });
+        setResult({
+          ...parsed,
+          // Models sometimes emit the string "true" instead of a boolean.
+          untranslatable: parsed.untranslatable === true || parsed.untranslatable === "true",
+          _input: text,
+        });
         setRefineCustom("");
         setHistory((h) =>
           [

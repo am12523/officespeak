@@ -99,7 +99,7 @@ Message:
 Respond ONLY with valid JSON, no markdown fences, no preamble. Every string value must be a single valid JSON string — escape any line breaks inside string values as \\n. Exactly this shape:
 {{
   "translation": "the rewritten message",
-  "untranslatable": false,
+  "untranslatable": <true ONLY if rule 2b applies (no work-related intent); otherwise false>,
   "changes": [
     {{ "from": "casual word or phrase from the input", "to": "the replacement used", "reason": "one short sentence on why this wording works better" }}
   ],
